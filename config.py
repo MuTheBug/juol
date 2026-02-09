@@ -68,7 +68,7 @@ BARRIER_TIME_LIMIT = 12
 CORRELATION_THRESHOLD = 0.95
 
 # Model Training
-PURGE_GAP = 12
+PURGE_GAP = 24
 TRAIN_WINDOW = 2000
 TEST_WINDOW = 500
 STEP_SIZE = 500
@@ -79,8 +79,9 @@ EXCLUDE_COLS = [
     'market_open', 'market_high', 'market_low', 'market_close', 'market_volume',
     'fundingRate', 'vwap', 'atr_barrier', 'atr',
     'last_24h_high', 'last_24h_low',
+    'ADX_14', 'volume_sma_ratio', 'volatility_regime',
     'triple_barrier_label', 'forward_return_12h', 'forward_price_diff', 'risk_adj_return',
-    'signal', 'confidence', 'regime'
+    'signal', 'confidence', 'regime', 'trend_aligned'
 ]
 
 # Risk Management

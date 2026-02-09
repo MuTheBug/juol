@@ -80,6 +80,7 @@ class WalkForwardBacktester:
 
             predictions = ensemble.predict(X_test)
             confidence = ensemble.get_confidence(X_test)
+            detailed_probas = ensemble.get_detailed_probas(X_test)
 
             # In-Sample (IS) performance
             is_preds = ensemble.predict(X_train)
@@ -107,7 +108,10 @@ class WalkForwardBacktester:
                 'test_indices': test_df.index,
                 'predictions': predictions,
                 'confidences': confidence,
-                'regimes': test_regimes
+                'detailed_probas': detailed_probas,
+                'regimes': test_regimes,
+                'actuals': y_test,
+                'X_test': X_test
             }
             self.results.append(fold_results)
 

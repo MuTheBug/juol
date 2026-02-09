@@ -42,12 +42,22 @@ def run_phase4():
     df['regime'] = rf.fit_predict(df)
 
     # 4. Get OOS Signals via Walk-Forward
-    from config import EXCLUDE_COLS
-    feature_cols = [col for col in df.columns if col not in EXCLUDE_COLS]
+    # ROUND 1: Automated Feature Selection (Top 20 by Mutual Information)
+    from sklearn.feature_selection import mutual_info_classif
+    X_selector = df.drop(columns=[c for c in EXCLUDE_COLS if c in df.columns], errors='ignore')
+    y_selector = df['triple_barrier_label'].dropna()
+    common_idx = X_selector.index.intersection(y_selector.index)
 
-    logger.info("Generating OOS signals via Walk-Forward...")
+    # Use only trending/ranging clear labels for selector
+    mask = y_selector.loc[common_idx] != 0
+    mi = mutual_info_classif(X_selector.loc[common_idx][mask], y_selector.loc[common_idx][mask])
+    mi_series = pd.Series(mi, index=X_selector.columns).sort_values(ascending=False)
+    feature_cols = mi_series.head(20).index.tolist()
+    logger.info(f"Selected top 20 features: {feature_cols}")
+
+    logger.info(f"Generating OOS signals via Walk-Forward using {len(feature_cols)} features...")
     wfb = WalkForwardBacktester(df, 'triple_barrier_label', feature_cols)
-    results_list = wfb.run(n_trials_lgb=1, n_trials_xgb=1) # Quick run
+    results_list = wfb.run(n_trials_lgb=10, n_trials_xgb=5)
 
     # Reconstruct OOS Series
     all_oos_signals = pd.Series(0.0, index=df.index)
@@ -72,7 +82,8 @@ def run_phase4():
     backtest_period = df.loc[oos_period[0] : oos_period[-1]].copy()
 
     # 5. Run Event-Driven Backtester
-    bt = Backtester(backtest_period, initial_equity=10000.0)
+    # FINAL ROUND: Optimized parameters
+    bt = Backtester(backtest_period, initial_equity=10000.0, conf_threshold=0.63)
     report = bt.run()
 
     # 6. Metrics & Results

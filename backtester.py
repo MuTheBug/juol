@@ -14,7 +14,7 @@ class Backtester:
     Processes data candle-by-candle.
     """
     def __init__(self, df: pd.DataFrame, initial_equity: float = 10000.0,
-                 sl_mult: float = 1.5, tp_mult: float = 2.5, conf_threshold: float = 0.58):
+                 sl_mult: float = 2.0, tp_mult: float = 3.0, conf_threshold: float = 0.58):
         self.df = df
         self.initial_equity = initial_equity
         self.equity = initial_equity
@@ -67,8 +67,40 @@ class Backtester:
         signal = candle.get('signal', 0)
         confidence = candle.get('confidence', 0)
         regime = candle.get('regime', 0)
+        trend_aligned = candle.get('trend_aligned', 0)
 
-        if signal != 0 and confidence >= self.conf_threshold:
+        # 1. Mandatory Trend Alignment Filter
+        if signal == 1 and trend_aligned == -1:
+            # logger.debug(f"{timestamp}: Long rejected by trend filter.")
+            return
+        if signal == -1 and trend_aligned == 1:
+            # logger.debug(f"{timestamp}: Short rejected by trend filter.")
+            return
+
+        # 2. Confidence Filter
+        threshold = self.conf_threshold
+        if trend_aligned == 0:
+            threshold = 0.70 # Require higher confidence if trend is flat/unclear
+
+        # 3. Trade Quality Filters (ROUND 2)
+        adx = candle.get('ADX_14', 0)
+        vol_ratio = candle.get('volume_sma_ratio', 1)
+        vol_regime = candle.get('volatility_regime', 0)
+
+        is_quality = True
+        if adx < 20: is_quality = False
+        if vol_regime >= 3: is_quality = False
+        if vol_ratio < 0.8: is_quality = False
+
+        if signal != 0:
+            if confidence < threshold:
+                # logger.debug(f"{timestamp}: Signal rejected by confidence ({confidence:.2f} < {threshold:.2f})")
+                return
+            if not is_quality:
+                # logger.debug(f"{timestamp}: Signal rejected by quality (ADX: {adx:.1f}, Vol: {vol_ratio:.1f}, Reg: {vol_regime})")
+                return
+
+        if signal != 0 and confidence >= threshold and is_quality:
             # Check funding delay
             if self.risk_manager.check_funding_entry_delay(candle['fundingRate'], signal):
                 # logger.info(f"{timestamp}: Delaying entry due to high funding.")
@@ -99,7 +131,12 @@ class Backtester:
                 'tsl_distance': params['tsl_distance'],
                 'tsl_active': False,
                 'entry_atr': candle['atr'],
-                'hours_held': 0
+            'hours_held': 0,
+            'max_favorable_price': candle['close'],
+            'max_adverse_price': candle['close'],
+            'initial_drawdown': 0.0,
+            'confidence': confidence,
+            'regime': regime
             }
 
             # Deduct Entry Fee
@@ -112,37 +149,70 @@ class Backtester:
         pos = self.current_position
         pos['hours_held'] += 1
 
-        # Check SL/TP using High/Low
-        hit_sl = False
-        hit_tp = False
-
+        # Track MFE and MAE
         if pos['side'] == 1: # Long
-            if candle['low'] <= pos['sl_price']:
-                hit_sl = True
-            if candle['high'] >= pos['tp_price']:
-                hit_tp = True
+            pos['max_favorable_price'] = max(pos['max_favorable_price'], candle['high'])
+            pos['max_adverse_price'] = min(pos['max_adverse_price'], candle['low'])
         else: # Short
-            if candle['high'] >= pos['sl_price']:
-                hit_sl = True
-            if candle['low'] <= pos['tp_price']:
-                hit_tp = True
+            pos['max_favorable_price'] = min(pos['max_favorable_price'], candle['low'])
+            pos['max_adverse_price'] = max(pos['max_adverse_price'], candle['high'])
 
-        # If both hit in same candle, assume SL hit first (conservative)
-        if hit_sl and hit_tp:
-            self._close_position(candle, timestamp, "Stop Loss (Conservative)", price=pos['sl_price'])
-        elif hit_sl:
+        # Initial Drawdown
+        if pos['hours_held'] <= 3:
+            dd = (pos['entry_price'] - candle['low'] if pos['side'] == 1 else candle['high'] - pos['entry_price']) / pos['entry_price']
+            pos['initial_drawdown'] = max(pos['initial_drawdown'], dd)
+
+        # 1. Partial TP (50% at 1.5x ATR)
+        if not pos.get('partial_tp_hit', False):
+            ptp_price = pos['entry_price'] + (pos['side'] * 1.5 * pos['entry_atr'])
+            hit_ptp = (candle['high'] >= ptp_price if pos['side'] == 1 else candle['low'] <= ptp_price)
+            if hit_ptp:
+                pos['partial_tp_hit'] = True
+                # Realize half profit
+                half_notional = pos['notional_size'] / 2
+                pnl_pct = (ptp_price - pos['entry_price']) / pos['entry_price'] * pos['side']
+                pnl_usd = pnl_pct * half_notional
+                # Fees for half close
+                fee = half_notional * (ROUND_TRIP_COST / 2)
+                pnl_usd -= fee
+
+                self.equity += pnl_usd
+                self.risk_manager.update_equity(pnl_usd)
+
+                # Record the half trade
+                self.trades.append({
+                    'entry_timestamp': pos['entry_timestamp'],
+                    'exit_timestamp': timestamp,
+                    'side': pos['side'],
+                    'entry_price': pos['entry_price'],
+                    'exit_price': ptp_price,
+                    'pnl_pct': pnl_pct,
+                    'pnl_usd': pnl_usd,
+                    'reason': "Partial TP (50%)",
+                    'hold_time': pos['hours_held']
+                })
+
+                # Adjust remaining position
+                pos['notional_size'] = half_notional
+                # Move stop to breakeven for remaining 50%
+                pos['sl_price'] = pos['entry_price']
+
+        # Check SL/TP
+        hit_sl = (candle['low'] <= pos['sl_price'] if pos['side'] == 1 else candle['high'] >= pos['sl_price'])
+        hit_tp = (candle['high'] >= pos['tp_price'] if pos['side'] == 1 else candle['low'] <= pos['tp_price'])
+
+        if hit_sl:
             self._close_position(candle, timestamp, "Stop Loss", price=pos['sl_price'])
         elif hit_tp:
             self._close_position(candle, timestamp, "Take Profit", price=pos['tp_price'])
-
-        # Trailing Stop Activation/Update
         else:
             self._update_trailing_stop(candle)
-            # Time-based exit
-            if pos['hours_held'] >= 24:
-                profit = (candle['close'] - pos['entry_price']) * pos['side']
-                if profit < 0.5 * pos['entry_atr']:
-                    self._close_position(candle, timestamp, "Time Exit")
+            # Improved Time Exit (ROUND 3)
+            profit_atr = (candle['close'] - pos['entry_price']) * pos['side'] / pos['entry_atr']
+            if pos['hours_held'] >= 12 and profit_atr < 0:
+                self._close_position(candle, timestamp, "Time Exit (Early Loss)")
+            elif pos['hours_held'] >= 24 and profit_atr < 0.5:
+                self._close_position(candle, timestamp, "Time Exit (Stalled)")
 
     def _update_trailing_stop(self, candle):
         pos = self.current_position
@@ -182,6 +252,9 @@ class Backtester:
         self.risk_manager.add_trade_result(pnl_pct)
         self.risk_manager.update_equity(pnl_usd)
 
+        mfe = (pos['max_favorable_price'] - pos['entry_price']) / pos['entry_price'] * pos['side']
+        mae = (pos['max_adverse_price'] - pos['entry_price']) / pos['entry_price'] * pos['side']
+
         trade_record = {
             'entry_timestamp': pos['entry_timestamp'],
             'exit_timestamp': timestamp,
@@ -191,7 +264,13 @@ class Backtester:
             'pnl_pct': pnl_pct,
             'pnl_usd': pnl_usd,
             'reason': reason,
-            'hold_time': pos['hours_held']
+            'hold_time': pos['hours_held'],
+            'mfe': mfe,
+            'mae': mae,
+            'initial_drawdown': pos['initial_drawdown'],
+            'confidence': pos['confidence'],
+            'regime': pos['regime'],
+            'entry_atr': pos['entry_atr']
         }
         self.trades.append(trade_record)
         self.current_position = None

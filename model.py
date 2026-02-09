@@ -87,15 +87,15 @@ class LightGBMModel(BaseTradingModel):
 
         def objective(trial):
             params = {
-                'n_estimators': trial.suggest_int('n_estimators', 100, 2000),
-                'max_depth': trial.suggest_int('max_depth', 3, 10),
-                'learning_rate': trial.suggest_float('learning_rate', 0.005, 0.1, log=True),
-                'num_leaves': trial.suggest_int('num_leaves', 15, 127),
-                'min_child_samples': trial.suggest_int('min_child_samples', 10, 100),
+                'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
+                'max_depth': trial.suggest_int('max_depth', 3, 6),
+                'learning_rate': trial.suggest_float('learning_rate', 0.005, 0.05, log=True),
+                'num_leaves': trial.suggest_int('num_leaves', 15, 63),
+                'min_child_samples': trial.suggest_int('min_child_samples', 50, 200),
                 'subsample': trial.suggest_float('subsample', 0.6, 0.95),
                 'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 0.95),
-                'reg_alpha': trial.suggest_float('reg_alpha', 1e-8, 10.0, log=True),
-                'reg_lambda': trial.suggest_float('reg_lambda', 1e-8, 10.0, log=True),
+                'reg_alpha': trial.suggest_float('reg_alpha', 0.1, 100.0, log=True),
+                'reg_lambda': trial.suggest_float('reg_lambda', 0.1, 100.0, log=True),
                 'verbosity': -1,
                 'random_state': 42
             }
@@ -176,13 +176,13 @@ class XGBoostModel(BaseTradingModel):
 
         def objective(trial):
             params = {
-                'n_estimators': trial.suggest_int('n_estimators', 100, 2000),
-                'max_depth': trial.suggest_int('max_depth', 3, 10),
-                'learning_rate': trial.suggest_float('learning_rate', 0.005, 0.1, log=True),
+                'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
+                'max_depth': trial.suggest_int('max_depth', 3, 6),
+                'learning_rate': trial.suggest_float('learning_rate', 0.005, 0.05, log=True),
                 'subsample': trial.suggest_float('subsample', 0.6, 0.95),
                 'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 0.95),
-                'reg_alpha': trial.suggest_float('reg_alpha', 1e-8, 10.0, log=True),
-                'reg_lambda': trial.suggest_float('reg_lambda', 1e-8, 10.0, log=True),
+                'reg_alpha': trial.suggest_float('reg_alpha', 0.1, 100.0, log=True),
+                'reg_lambda': trial.suggest_float('reg_lambda', 0.1, 100.0, log=True),
                 'random_state': 42
             }
 
@@ -291,6 +291,21 @@ class EnsembleTradingModel:
         avg_pos = (lgb_probs[:, idx_pos] + xgb_probs[:, idx_pos]) / 2
 
         return pd.Series(np.maximum(avg_neg, avg_pos), index=X.index)
+
+    def get_detailed_probas(self, X: pd.DataFrame) -> pd.DataFrame:
+        lgb_probs = self.lgb_model.predict_proba(X)
+        xgb_probs = self.xgb_model.predict_proba(X)
+
+        classes = self.lgb_model.model.classes_
+        idx_neg = np.where(classes == 0)[0][0]
+        idx_pos = np.where(classes == 1)[0][0]
+
+        return pd.DataFrame({
+            'lgb_neg': lgb_probs[:, idx_neg],
+            'lgb_pos': lgb_probs[:, idx_pos],
+            'xgb_neg': xgb_probs[:, idx_neg],
+            'xgb_pos': xgb_probs[:, idx_pos]
+        }, index=X.index)
 
     def save(self, path: str):
         joblib.dump(self, path)

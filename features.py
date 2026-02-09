@@ -231,6 +231,18 @@ def add_meta_features(df: pd.DataFrame) -> pd.DataFrame:
     df['dist_from_24h_high'] = (df['close'] / df['last_24h_high']) - 1
     df['dist_from_24h_low'] = (df['close'] / df['last_24h_low']) - 1
 
+    # Trend Filter (Higher Timeframe)
+    # EMA(200) on 1H
+    df['ema_200'] = ta.ema(df['close'], length=200)
+    # 4H EMA(55) from 1H data
+    df['ema_4h_55'] = ta.ema(df['close'], length=55*4)
+
+    # Trend alignment indicators
+    df['trend_aligned'] = np.where(
+        ((df['close'] > df['ema_200']) & (ta.slope(df['ema_4h_55'], length=2) > 0)), 1,
+        np.where(((df['close'] < df['ema_200']) & (ta.slope(df['ema_4h_55'], length=2) < 0)), -1, 0)
+    )
+
     # Consecutive candle direction count
     # +1 if close > open, -1 if close < open
     direction = np.sign(df['close'] - df['open'])

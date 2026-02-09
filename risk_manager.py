@@ -80,6 +80,14 @@ class RiskManager:
         # 3. Kelly sizing
         kelly_size = self.calculate_kelly_size()
 
+        # ROUND 4: Cap maximum loss per trade at 1% of equity
+        # Risk = sl_mult * ATR.  Loss = Quantity * Risk = (Notional/Price) * (sl_mult * ATR)
+        # We want Loss <= 0.01 * Equity
+        # (Notional) * (sl_mult * ATR / Price) <= 0.01 * Equity
+        # Notional <= (0.01 * Equity) / (sl_mult * ATR / Price)
+
+        max_risk_notional = (0.01 * max(0.0, self.equity)) / (sl_mult * atr / price)
+
         # Drawdown circuit breaker level 1 (15% drop)
         drawdown = (self.peak_equity - self.equity) / self.peak_equity
         if drawdown >= 0.15:
@@ -88,6 +96,7 @@ class RiskManager:
 
         # Notional size
         notional_size = max(0.0, self.equity) * kelly_size * leverage
+        notional_size = min(notional_size, max_risk_notional) # Apply 1% risk cap
 
         # 4. SL / TP
         # SL = sl_mult * ATR, TP = tp_mult * ATR
