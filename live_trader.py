@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import math
+import numpy as np
 from typing import Dict, Any, Optional
 from binance import AsyncClient, BinanceSocketManager
 from binance.exceptions import BinanceAPIException

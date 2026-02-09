@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split
 
 import data_pipeline as dp
 import features as ft
-from config import PRIMARY_ASSET, SECONDARY_ASSET
+from config import PRIMARY_ASSET, SECONDARY_ASSET, EXCLUDE_COLS
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -37,14 +37,12 @@ def run_phase1():
     logger.info("Handling NaNs...")
     df = df.ffill().dropna()
 
-    # Define columns to exclude from feature processing (targets and OHLCV if desired)
+    # Define targets
     target_cols = ['triple_barrier_label', 'forward_return_12h', 'forward_price_diff', 'risk_adj_return']
-    raw_cols = ['open', 'high', 'low', 'close', 'volume', 'market_open', 'market_high', 'market_low', 'market_close', 'market_volume', 'fundingRate', 'vwap', 'atr_barrier', 'last_24h_high', 'last_24h_low']
-    exclude_cols = target_cols + raw_cols
 
     # 5. Preprocessing
-    df = dp.apply_rolling_zscore(df, exclude_cols)
-    df = dp.remove_highly_correlated_features(df, exclude_cols)
+    df = dp.apply_rolling_zscore(df, EXCLUDE_COLS)
+    df = dp.remove_highly_correlated_features(df, EXCLUDE_COLS)
 
     # Final cleanup of NaNs introduced by z-score (at the beginning of the series)
     df = df.dropna()
@@ -56,7 +54,7 @@ def run_phase1():
     analyze_importance(df, target_cols)
 
     # 7. Visualization
-    plot_correlation(df, exclude_cols)
+    plot_correlation(df, EXCLUDE_COLS)
 
     return df
 
@@ -65,7 +63,7 @@ def analyze_importance(df: pd.DataFrame, target_cols: List[str]):
 
     # Use triple_barrier_label, discard class 0
     data = df[df['triple_barrier_label'] != 0].dropna()
-    X = data.drop(columns=target_cols + ['open', 'high', 'low', 'close', 'volume', 'market_open', 'market_high', 'market_low', 'market_close', 'market_volume', 'fundingRate', 'vwap', 'atr_barrier', 'last_24h_high', 'last_24h_low'], errors='ignore')
+    X = data.drop(columns=[c for c in EXCLUDE_COLS if c in data.columns], errors='ignore')
     y = data['triple_barrier_label']
 
     # Mutual Information

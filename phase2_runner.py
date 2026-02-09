@@ -26,20 +26,14 @@ def run_phase2():
 
     # 2. Preprocessing
     df = df.ffill().dropna()
-    target_cols = ['triple_barrier_label', 'forward_return_12h', 'forward_price_diff', 'risk_adj_return']
-    raw_cols = ['open', 'high', 'low', 'close', 'volume', 'market_open', 'market_high', 'market_low', 'market_close', 'market_volume', 'fundingRate', 'vwap', 'atr_barrier', 'last_24h_high', 'last_24h_low']
-    exclude_cols = target_cols + raw_cols
+    from config import EXCLUDE_COLS
 
-    df = dp.apply_rolling_zscore(df, exclude_cols)
-    df = dp.remove_highly_correlated_features(df, exclude_cols)
+    df = dp.apply_rolling_zscore(df, EXCLUDE_COLS)
+    df = dp.remove_highly_correlated_features(df, EXCLUDE_COLS)
     df = df.dropna()
 
-    # 3. Regime Filter
-    rf = RegimeFilter()
-    df['regime'] = rf.fit_predict(df)
-
-    # 4. Walk-Forward Backtest
-    feature_cols = [col for col in df.columns if col not in exclude_cols + ['regime']]
+    # 3. Walk-Forward Backtest
+    feature_cols = [col for col in df.columns if col not in EXCLUDE_COLS]
     wfb = WalkForwardBacktester(df, 'triple_barrier_label', feature_cols)
 
     # For quick verification, we use very few trials

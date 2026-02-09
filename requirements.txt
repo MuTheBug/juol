@@ -11,4 +11,4 @@ xgboost
 python-binance
 ccxt
 requests
-pyyaml
+joblib

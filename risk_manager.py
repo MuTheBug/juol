@@ -119,12 +119,35 @@ class RiskManager:
 
     def check_funding_entry_delay(self, funding_rate: float, direction: int) -> bool:
         """
-        If funding rate > 0.05% and we'd be paying: delay entry.
+        If funding settlement is within next 2 hours AND funding rate > 0.05%
+        AND we'd be paying: delay entry.
         direction: 1 for long, -1 for short.
         """
-        # Paying if (long and positive) or (short and negative)
-        if (direction == 1 and funding_rate > 0.0005) or (direction == -1 and funding_rate < -0.0005):
-            return True # Delay
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+
+        # Next settlement hours: 0, 8, 16
+        settlement_hours = [0, 8, 16]
+        next_settlement = None
+        for h in settlement_hours:
+            target = now.replace(hour=h, minute=0, second=0, microsecond=0)
+            if target > now:
+                next_settlement = target
+                break
+
+        if not next_settlement: # It's after 16:00, next is 00:00 tomorrow
+            next_settlement = now.replace(day=now.day+1, hour=0, minute=0, second=0, microsecond=0)
+
+        time_to_settlement = (next_settlement - now).total_seconds() / 3600
+
+        is_close = time_to_settlement <= 2.0
+        is_high = abs(funding_rate) > 0.0005
+        is_paying = (direction == 1 and funding_rate > 0) or (direction == -1 and funding_rate < 0)
+
+        if is_close and is_high and is_paying:
+            logger.warning(f"Delaying entry: Funding settlement in {time_to_settlement:.1f}h, Rate: {funding_rate:.4%}")
+            return True
+
         return False
 
     def check_circuit_breakers(self) -> bool:

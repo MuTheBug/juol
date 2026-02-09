@@ -77,9 +77,8 @@ class TradingBot:
         # Preprocessing (Rolling Z-Score needs enough history)
         # Assuming we fetched 500 klines, we can apply z-score
         from data_pipeline import apply_rolling_zscore
-        target_cols = [] # No targets in live
-        raw_cols = ['open', 'high', 'low', 'close', 'volume', 'market_close', 'fundingRate', 'vwap', 'atr_barrier', 'last_24h_high', 'last_24h_low']
-        df = apply_rolling_zscore(df, raw_cols)
+        from config import EXCLUDE_COLS
+        df = apply_rolling_zscore(df, EXCLUDE_COLS)
 
         return df.dropna()
 
@@ -93,7 +92,8 @@ class TradingBot:
             return
 
         last_candle = df.iloc[-1]
-        X = df.drop(columns=['open', 'high', 'low', 'close', 'volume', 'market_close', 'fundingRate', 'vwap', 'atr_barrier', 'last_24h_high', 'last_24h_low'], errors='ignore')
+        from config import EXCLUDE_COLS
+        X = df.drop(columns=[c for c in EXCLUDE_COLS if c in df.columns], errors='ignore')
         X = X.tail(1)
 
         # 2. Regime Filter
@@ -164,8 +164,20 @@ class TradingBot:
                 self.notifier.notify_error(str(e))
 
 if __name__ == "__main__":
+    import os
+    import sys
+
     bot = TradingBot()
-    # In real usage, we'd load the ensemble here
-    # bot.ensemble = EnsembleTradingModel.load("best_model.joblib")
-    # asyncio.run(bot.main_loop())
-    print("Main script developed. Entry point for live trading.")
+
+    model_path = "best_model.joblib"
+    if os.path.exists(model_path):
+        logger.info(f"Loading ensemble model from {model_path}")
+        bot.ensemble = EnsembleTradingModel.load(model_path)
+    else:
+        logger.error(f"Ensemble model not found at {model_path}. Bot cannot start.")
+        sys.exit(1)
+
+    try:
+        asyncio.run(bot.main_loop())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user.")

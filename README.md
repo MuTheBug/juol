@@ -1,6 +1,6 @@
 # Autonomous Trading Bot - Binance USDT-M Futures
 
-This repository contains a production-grade autonomous trading bot for Binance USDT-Margined Futures, developed in multiple phases.
+This repository contains a production-grade autonomous trading bot for Binance USDT-Margined Futures. It uses an ensemble of machine learning models (LightGBM & XGBoost), sophisticated risk management (Half Kelly, circuit breakers), and a GMM-based market regime filter.
 
 ## Architecture Overview
 
@@ -12,91 +12,131 @@ This repository contains a production-grade autonomous trading bot for Binance U
   Funding Rates   Clean NaNs           Indicators       State Classifier      Optuna Optimized      Circuit Breakers
 ```
 
-## Completed Phases
+## Features & Implementation
 
-### Phase 1: Data Pipeline & Feature Engineering
+### 1. Data Pipeline & Feature Engineering
 - **Modular Ingestion**: Efficient loading and merging of OHLCV and funding rate data.
-- **77 Features**: Comprehensive coverage of Trend, Momentum, Volatility, Volume, Microstructure, Temporal, and Meta categories.
-- **Strict Causality**: Rolling z-score normalization (lookback=168) and purged K-fold logic to prevent look-ahead bias.
-- **Target Engineering**: Triple Barrier Method (TBM) with ATR-based barriers.
+- **77 Features**: Comprehensive coverage across Trend, Momentum, Volatility, Volume, Microstructure, Temporal, and Meta categories.
+- **Strict Causality**: Rolling z-score normalization (lookback=168) excluding prices/ATR/targets to prevent look-ahead bias.
+- **Target Engineering**: Triple Barrier Method (TBM) with dynamic ATR-based barriers and risk-adjusted continuous targets.
 
-### Phase 2: Model Architecture
+### 2. Model Architecture
 - **Ensemble System**: Combined LightGBM and XGBoost classifiers. Execution requires directional agreement and a 0.58 confidence threshold.
-- **Regime Filter**: Unsupervised Gaussian Mixture Model (GMM) classifying markets into TRENDING, RANGING, and VOLATILE/CHAOTIC.
-- **Walk-Forward Framework**: 2000-candle train, 500-candle test, and 500-candle step windows with periodic Optuna hyperparameter re-optimization.
-- **Sample Weighting**: Inverse ATR weighting to prioritize signals in cleaner, low-volatility environments.
+- **Regime Filter**: Unsupervised Gaussian Mixture Model (GMM) classifying markets into TRENDING, RANGING, and VOLATILE.
+- **Walk-Forward Framework**: Robust validation scheme (2000-candle train, 500-candle test) with periodic Optuna hyperparameter re-optimization (targeting Calmar ratio).
 
-### Phase 3: Risk Management Engine
-- **Fractional Kelly**: Position sizing using Half Kelly Criterion based on trailing performance.
-- **Dynamic Leverage**: Regime-based base leverage (up to 10x) further scaled by model confidence.
-- **Circuit Breakers**: Daily/Weekly loss limits and two-tier drawdown protection.
-- **Advanced Exits**: ATR-based dynamic SL/TP, trailing stops, and time-based exits.
+### 3. Risk Management Engine
+- **Fractional Kelly**: Position sizing using Half Kelly Criterion based on trailing 50-trade performance.
+- **Dynamic Leverage**: Regime-based base leverage (Trending 10x, Ranging 5x, Volatile 3x) scaled by model confidence.
+- **Circuit Breakers**: Multi-tier protection including Daily (-3%) / Weekly (-7%) loss limits and Drawdown-based sizing reductions.
+- **Advanced Exits**: ATR-based dynamic SL (1.5x) and TP (2.5x), trailing stops, and 24h time-based exits.
 
-### Phase 4: Event-Driven Backtester
-- **Candle-by-Candle Simulation**: Chronological processing using High/Low for realistic SL/TP checks.
-- **Comprehensive Metrics**: Annualized Sharpe (risk-free adjusted), CAGR, Sortino, Calmar, and Drawdown analysis.
-- **Robustness Suite**: 1000-iteration Monte Carlo simulations and SL/TP sensitivity heatmaps.
-- **Detailed Reporting**: Automated generation of equity curves, monthly heatmaps, and trade logs in CSV.
+### 4. Backtesting & Robustness
+- **Event-Driven Engine**: Candle-by-candle simulation using High/Low for realistic SL/TP checks.
+- **Correct Metrics**: Annualized Sharpe (5% risk-free adjusted), CAGR, Sortino, Calmar, and Drawdown analysis.
+- **Robustness Tests**: 1000-iteration Monte Carlo sequence reshuffling and SL/TP sensitivity heatmaps.
 
-### Phase 5: Live Trading Infrastructure
-- **Async Execution**: hourly loop synchronized with candle close (:01 past).
-- **Binance Integration**: Async order management with automatic precision/lot-size formatting.
-- **Error Handling**: 3-tier retry logic with exponential backoff and Telegram failure alerts.
-- **Persistent Logging**: SQLite-based trade and prediction logging for post-trade analysis.
+### 5. Live Trading Infrastructure
+- **Async Execution**: Hourly loop synchronized with candle close (:01 past).
+- **Order Management**: Automatic precision and lot-size formatting based on exchange rules.
+- **Failure Resilience**: 3-tier retry logic with exponential backoff and instant Telegram alerts.
+- **Persistent Audit**: SQLite-based logging of every trade and model prediction.
 
-## Modular Components
+---
 
-### 1. `config.py`
-Centralized configuration for all hyperparameters, including EMA periods, ATR lookbacks, risk parameters, and preprocessing thresholds. This ensures consistency across the entire pipeline.
+## Installation Guide
 
-### 2. `data_pipeline.py`
-- **Data Ingestion**: Loads 1H klines and 8H funding rates. Automatically merges secondary asset data (BTCUSDT) for market regime reference.
-- **Target Engineering**:
-    - **Triple Barrier Method**: Implements a forward-looking labeling system. Barriers are set at $\pm 1.5 \times ATR(14)$, with a 12-hour timeout.
-    - **Risk-Adjusted Return**: Calculates (12H Forward Return / Current ATR) as a continuous target for potential regression models.
-- **Preprocessing**:
-    - **Rolling Z-Scores**: Features are standardized using a 168-hour (1 week) rolling window. This is critical to prevent "future look-ahead bias" that occurs with global standardization.
-    - **Correlation Filter**: Automatically removes features with a Pearson correlation > 0.95 to reduce redundancy and model complexity.
+### 1. Prerequisites
+- Python 3.10 or higher
+- A Binance account with Futures enabled
+- A Telegram Bot (optional, for notifications)
 
-### 3. `features.py`
-Engineers 77 distinct features across 7 categories:
-- **Trend**: EMA crosses, Linear Regression slopes, ADX, Supertrend, VWAP distance.
-- **Momentum**: RSI (with divergence detection), MACD, Stochastic RSI, ROC, Williams %R.
-- **Volatility**: ATR, Bollinger Bands, Keltner Channels, Parkinson Volatility, Volatility Regime Classifier.
-- **Volume**: OBV, Volume SMA ratio, VPT, Accumulation/Distribution.
-- **Microstructure**: Funding rate MA/Z-score, BTC correlation, BTC RSI.
-- **Temporal**: Cyclical encoding of hours/days, Session one-hot encoding, Time since extremes.
-- **Meta**: Rolling Sharpe ratios, Distance from 24H High/Low, Consecutive candle counts.
+### 2. Setup Environment
+```bash
+# Clone the repository (or extract files)
+cd autonomous-trading-bot
 
-### 4. `phase1_runner.py`
-The orchestration script that runs the full pipeline, prints feature/sample counts, and performs feature importance analysis using:
-- **Mutual Information**: Captures non-linear dependencies between features and the Triple Barrier label.
-- **Permutation Importance**: Measures feature impact using a baseline Random Forest classifier.
+# Create a virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-## Design Decisions
+# Install dependencies
+pip install -r requirements.txt
+```
 
-- **Avoidance of Look-ahead Bias**: All calculations are strictly causal. Rolling z-scores and shifted targets ensure the model only trains on information that would have been available at the time.
-- **ATR-Based Barriers**: Using ATR for barriers instead of fixed percentages makes the labels volatility-aware, which is essential for crypto markets where volatility is non-stationary.
-- **Standardization**: Rolling z-scores handle non-stationary features better than global scaling, especially for indicators that aren't naturally bounded (like volume or VPT).
+### 3. Configuration
+Copy the template and fill in your details:
+```bash
+cp config.yaml.template config.yaml
+```
+Edit `config.yaml`:
+- **binance**: API keys (Use Testnet first if desired)
+- **telegram**: Bot token and Chat ID
+- **trading**: Adjust asset pairs and initial equity
 
-## How to Run
+---
 
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Run Phase 1 analysis:
-   ```bash
-   python phase1_runner.py
-   ```
-3. Run Phase 2 Walk-Forward backtest:
-   ```bash
-   python phase2_runner.py
-   ```
+## Usage Instructions
 
-## Roadmap
+### 1. Data Preparation
+Place your OHLCV and funding rate CSV files in the root directory. Expected format: `[ASSET]_1h_klines.csv` and `[ASSET]_funding_8h.csv`.
 
-- **Deployment**: Systemd/Docker orchestration for cloud-based continuous trading.
+### 2. Run Backtest & Analysis
+To verify the strategy and generate performance reports:
+```bash
+python phase4_runner.py
+```
+This will produce:
+- `backtest_trades.csv`: Detailed trade log.
+- `backtest_equity_curve.csv`: Periodic equity balance.
+- `backtest_report.png`: Equity curve and drawdown plots.
+- `monthly_heatmap.png`: Returns by month/year.
+- `sensitivity_heatmap.png`: Parameter stability analysis.
+
+### 3. Run Live Bot
+**WARNING: Ensure you have tested the strategy thoroughly and have configured `config.yaml` correctly.**
+
+To start the bot in live/dry-run mode (set `is_live` in config):
+```bash
+python main.py
+```
+The bot will initialize, fetch the latest balance, and enter its hourly loop.
+
+---
+
+## Deployment (Production)
+
+### Systemd Service (Linux)
+To ensure the bot runs continuously and restarts on failure, create a systemd service:
+
+1. Create `/etc/systemd/system/trading-bot.service`:
+```ini
+[Unit]
+Description=Binance Trading Bot
+After=network.target
+
+[Service]
+User=your-user
+WorkingDirectory=/path/to/bot
+ExecStart=/path/to/bot/venv/bin/python main.py
+Restart=always
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target
+```
+
+2. Start the service:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable trading-bot
+sudo systemctl start trading-bot
+```
+
+### Docker
+(Optional) A `Dockerfile` can be provided for containerized deployment.
+
+---
 
 ## Risk Warning
-This is experimental software. Trading cryptocurrencies involves significant risk of capital loss.
+This software is for educational and research purposes only. Trading cryptocurrency futures involves significant risk of capital loss. The developers are not responsible for any financial losses incurred through the use of this bot. **Never trade money you cannot afford to lose.**
