@@ -1,16 +1,30 @@
-# Autonomous Trading Bot - Phase 1: Data Pipeline & Feature Engineering
+# Autonomous Trading Bot - Binance USDT-M Futures
 
-This repository contains the first phase of a production-grade autonomous trading bot for Binance USDT-Margined Futures.
+This repository contains a production-grade autonomous trading bot for Binance USDT-Margined Futures, developed in multiple phases.
 
-## Architecture Overview (Phase 1)
+## Architecture Overview
 
 ```ascii
-[ CSV Data ] --> [ data_pipeline.py ] --> [ features.py ] --> [ Preprocessing ] --> [ Analysis/Output ]
-      ^                |                         |                  |                      |
-      |                v                         v                  v                      v
-  OHLCV, BTC,     Load & Merge            Calculate 70+        Rolling Z-Score,      MI & Permutation
-  Funding Rates   Clean NaNs              Technical Indicators  Correlation Drop      Importance
+[ CSV Data ] --> [ Data Pipeline ] --> [ Features ] --> [ Regime Filter ] --> [ Ensemble Model ] --> [ Risk Manager ]
+      ^                |                    |                |                      |                  |
+      |                v                    v                v                      v                  v
+  OHLCV, BTC,     Load & Merge         77 Technical     GMM-based Market      LightGBM + XGBoost    Half Kelly, SL/TP,
+  Funding Rates   Clean NaNs           Indicators       State Classifier      Optuna Optimized      Circuit Breakers
 ```
+
+## Completed Phases
+
+### Phase 1: Data Pipeline & Feature Engineering
+- **Modular Ingestion**: Efficient loading and merging of OHLCV and funding rate data.
+- **77 Features**: Comprehensive coverage of Trend, Momentum, Volatility, Volume, Microstructure, Temporal, and Meta categories.
+- **Strict Causality**: Rolling z-score normalization (lookback=168) and purged K-fold logic to prevent look-ahead bias.
+- **Target Engineering**: Triple Barrier Method (TBM) with ATR-based barriers.
+
+### Phase 2: Model Architecture
+- **Ensemble System**: Combined LightGBM and XGBoost classifiers. Execution requires directional agreement and a 0.58 confidence threshold.
+- **Regime Filter**: Unsupervised Gaussian Mixture Model (GMM) classifying markets into TRENDING, RANGING, and VOLATILE/CHAOTIC.
+- **Walk-Forward Framework**: 2000-candle train, 500-candle test, and 500-candle step windows with periodic Optuna hyperparameter re-optimization.
+- **Sample Weighting**: Inverse ATR weighting to prioritize signals in cleaner, low-volatility environments.
 
 ## Modular Components
 
@@ -53,16 +67,20 @@ The orchestration script that runs the full pipeline, prints feature/sample coun
    ```bash
    pip install -r requirements.txt
    ```
-2. Run the Phase 1 pipeline:
+2. Run Phase 1 analysis:
    ```bash
    python phase1_runner.py
    ```
-   This will generate a `feature_correlation.png` and output the top features by importance.
-
-3. Run unit tests:
+3. Run Phase 2 Walk-Forward backtest:
    ```bash
-   python test_pipeline.py
+   python phase2_runner.py
    ```
+
+## Roadmap
+
+- **Phase 3: Risk Management Engine** (Current): Kelly-based sizing, dynamic leverage, trailing stops, and circuit breakers.
+- **Phase 4: Event-Driven Backtester**: Candle-by-candle simulation with fee and funding rate modeling.
+- **Phase 5: Live Trading Infrastructure**: Async execution, API integration, and Telegram notifications.
 
 ## Risk Warning
 This is experimental software. Trading cryptocurrencies involves significant risk of capital loss.
