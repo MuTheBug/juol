@@ -10,3 +10,5 @@ lightgbm
 xgboost
 python-binance
 ccxt
+requests
+pyyaml

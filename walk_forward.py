@@ -25,6 +25,7 @@ class WalkForwardBacktester:
 
         lgb_model = LightGBMModel()
         xgb_model = XGBoostModel()
+        regime_filter = RegimeFilter()
 
         # Limit folds for Phase 2 demo if necessary, but here we'll try to run a decent amount
         max_folds = 20 # Limit for verification
@@ -41,6 +42,10 @@ class WalkForwardBacktester:
             # Data split
             train_df = self.df.iloc[train_start:train_end]
             test_df = self.df.iloc[test_start:test_end]
+
+            # Fit regime filter on training data ONLY
+            regime_filter.fit(train_df)
+            test_regimes = regime_filter.predict(test_df)
 
             # Discard class 0 (neutral) from training as per Phase 2 instructions
             train_clean = train_df[train_df[self.target_col] != 0].copy()
@@ -98,7 +103,11 @@ class WalkForwardBacktester:
                 'is_accuracy': is_acc,
                 'oos_accuracy': acc,
                 'precision': prec,
-                'n_signals': valid_idx.sum()
+                'n_signals': valid_idx.sum(),
+                'test_indices': test_df.index,
+                'predictions': predictions,
+                'confidences': confidence,
+                'regimes': test_regimes
             }
             self.results.append(fold_results)
 

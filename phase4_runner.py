@@ -31,12 +31,10 @@ def run_phase4():
 
     # 2. Preprocessing
     df = df.ffill().dropna()
-    target_cols = ['triple_barrier_label', 'forward_return_12h', 'forward_price_diff', 'risk_adj_return']
-    raw_cols = ['open', 'high', 'low', 'close', 'volume', 'market_open', 'market_high', 'market_low', 'market_close', 'market_volume', 'fundingRate', 'vwap', 'atr_barrier', 'last_24h_high', 'last_24h_low']
-    exclude_cols = target_cols + raw_cols
+    from config import EXCLUDE_COLS
 
-    df = dp.apply_rolling_zscore(df, exclude_cols)
-    df = dp.remove_highly_correlated_features(df, exclude_cols)
+    df = dp.apply_rolling_zscore(df, EXCLUDE_COLS)
+    df = dp.remove_highly_correlated_features(df, EXCLUDE_COLS)
     df = df.dropna()
 
     # 3. Regime Filter
@@ -44,60 +42,34 @@ def run_phase4():
     df['regime'] = rf.fit_predict(df)
 
     # 4. Get OOS Signals via Walk-Forward
-    # To save time in demo, we'll use a smaller train window or fewer folds
-    feature_cols = [col for col in df.columns if col not in exclude_cols + ['regime']]
+    from config import EXCLUDE_COLS
+    feature_cols = [col for col in df.columns if col not in EXCLUDE_COLS]
 
-    # Custom Walk-Forward that returns signals
     logger.info("Generating OOS signals via Walk-Forward...")
-    # We'll re-implement a bit of walk-forward logic to collect signals across all folds
+    wfb = WalkForwardBacktester(df, 'triple_barrier_label', feature_cols)
+    results_list = wfb.run(n_trials_lgb=1, n_trials_xgb=1) # Quick run
+
+    # Reconstruct OOS Series
     all_oos_signals = pd.Series(0.0, index=df.index)
     all_oos_conf = pd.Series(0.0, index=df.index)
+    all_oos_regimes = pd.Series(0.0, index=df.index)
 
-    # Just run a few folds for Phase 4 demo
-    train_window = 2000
-    test_window = 500
-    step_size = 500
-    purge_gap = 12
-
-    start_idx = 0
-    lgb_model = LightGBMModel()
-    xgb_model = XGBoostModel()
-
-    fold = 0
-    max_folds = 5
-
-    while start_idx + train_window + purge_gap + test_window <= len(df) and fold < max_folds:
-        logger.info(f"Fold {fold}...")
-        train_df = df.iloc[start_idx : start_idx + train_window]
-        test_df = df.iloc[start_idx + train_window + purge_gap : start_idx + train_window + purge_gap + test_window]
-
-        train_clean = train_df[train_df['triple_barrier_label'] != 0].copy()
-        X_train = train_clean[feature_cols]
-        y_train = train_clean['triple_barrier_label'].map({-1: 0, 1: 1})
-        weights = 1.0 / train_clean['atr_barrier']
-        weights = weights / weights.mean()
-
-        # Quick fit (no optimization for demo speed)
-        lgb_model.fit(X_train, y_train, sample_weight=weights)
-        xgb_model.fit(X_train, y_train, sample_weight=weights)
-
-        ensemble = EnsembleTradingModel(lgb_model, xgb_model)
-        X_test = test_df[feature_cols]
-
-        all_oos_signals.loc[test_df.index] = ensemble.predict(X_test).values
-        all_oos_conf.loc[test_df.index] = ensemble.get_confidence(X_test).values
-
-        start_idx += step_size
-        fold += 1
+    for res in wfb.results:
+        all_oos_signals.loc[res['test_indices']] = res['predictions'].values
+        all_oos_conf.loc[res['test_indices']] = res['confidences'].values
+        all_oos_regimes.loc[res['test_indices']] = res['regimes'].values
 
     df['signal'] = all_oos_signals
     df['confidence'] = all_oos_conf
+    df['regime'] = all_oos_regimes
 
     # Filter only the period where we have OOS signals
-    backtest_df = df[df['signal'] != 0].copy() # This might be too restrictive if we want to see flat periods
-    # Actually, we want the whole period covered by OOS tests
-    backtest_period = df[(df.index >= all_oos_signals[all_oos_signals != 0].index[0]) &
-                         (df.index <= all_oos_signals[all_oos_signals != 0].index[-1])].copy()
+    oos_period = all_oos_signals[all_oos_signals != 0].index
+    if len(oos_period) == 0:
+        logger.error("No OOS signals generated. Check model thresholds.")
+        return
+
+    backtest_period = df.loc[oos_period[0] : oos_period[-1]].copy()
 
     # 5. Run Event-Driven Backtester
     bt = Backtester(backtest_period, initial_equity=10000.0)
@@ -112,6 +84,11 @@ def run_phase4():
             print(f"{k:25}: {v:.4f}")
         else:
             print(f"{k:25}: {v}")
+
+    # Save detailed results to CSV
+    report['trades'].to_csv("backtest_trades.csv", index=False)
+    report['equity_curve'].to_csv("backtest_equity_curve.csv")
+    logger.info("Detailed backtest results saved to backtest_trades.csv and backtest_equity_curve.csv")
 
     # 7. Plots
     plot_backtest_results(report, backtest_period)

@@ -32,6 +32,18 @@ This repository contains a production-grade autonomous trading bot for Binance U
 - **Circuit Breakers**: Daily/Weekly loss limits and two-tier drawdown protection.
 - **Advanced Exits**: ATR-based dynamic SL/TP, trailing stops, and time-based exits.
 
+### Phase 4: Event-Driven Backtester
+- **Candle-by-Candle Simulation**: Chronological processing using High/Low for realistic SL/TP checks.
+- **Comprehensive Metrics**: Annualized Sharpe (risk-free adjusted), CAGR, Sortino, Calmar, and Drawdown analysis.
+- **Robustness Suite**: 1000-iteration Monte Carlo simulations and SL/TP sensitivity heatmaps.
+- **Detailed Reporting**: Automated generation of equity curves, monthly heatmaps, and trade logs in CSV.
+
+### Phase 5: Live Trading Infrastructure
+- **Async Execution**: hourly loop synchronized with candle close (:01 past).
+- **Binance Integration**: Async order management with automatic precision/lot-size formatting.
+- **Error Handling**: 3-tier retry logic with exponential backoff and Telegram failure alerts.
+- **Persistent Logging**: SQLite-based trade and prediction logging for post-trade analysis.
+
 ## Modular Components
 
 ### 1. `config.py`
@@ -84,8 +96,7 @@ The orchestration script that runs the full pipeline, prints feature/sample coun
 
 ## Roadmap
 
-- **Phase 4: Event-Driven Backtester** (Current): Candle-by-candle simulation with fee and funding rate modeling, Monte Carlo, and sensitivity analysis.
-- **Phase 5: Live Trading Infrastructure**: Async execution, API integration, and Telegram notifications.
+- **Deployment**: Systemd/Docker orchestration for cloud-based continuous trading.
 
 ## Risk Warning
 This is experimental software. Trading cryptocurrencies involves significant risk of capital loss.

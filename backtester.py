@@ -20,6 +20,8 @@ class Backtester:
         self.equity = initial_equity
         self.equity_history = []
         self.trades = []
+        self.total_fees = 0.0
+        self.total_funding = 0.0
         self.current_position = None
         self.risk_manager = RiskManager(initial_equity)
         self.sl_mult = sl_mult
@@ -103,6 +105,7 @@ class Backtester:
             # Deduct Entry Fee
             fee = params['notional_size'] * (ROUND_TRIP_COST / 2)
             self.equity -= fee
+            self.total_fees += fee
             # logger.info(f"{timestamp}: Opened {signal} at {candle['close']}. Size: {params['notional_size']:.2f}")
 
     def _handle_open_position(self, candle, timestamp):
@@ -170,6 +173,7 @@ class Backtester:
         # Deduct Exit Fee
         fee = pos['notional_size'] * (ROUND_TRIP_COST / 2)
         pnl_usd -= fee
+        self.total_fees += fee
 
         self.equity += pnl_usd
         # Cap equity to avoid overflow in metrics/plots
@@ -201,6 +205,7 @@ class Backtester:
         # Payment = - (side * funding_rate * notional)
         payment = - (self.current_position['side'] * funding_rate * self.current_position['notional_size'])
         self.equity += payment
+        self.total_funding += abs(payment) if payment < 0 else -payment # Sign convention
         self.risk_manager.update_equity(payment)
         # logger.info(f"{timestamp}: Funding payment: ${payment:.2f}")
 
@@ -318,5 +323,7 @@ class Backtester:
             'Worst Month': worst_month,
             '% Profitable Months': profitable_months_pct,
             'Max Consecutive Wins': max_wins,
-            'Max Consecutive Losses': max_losses
+            'Max Consecutive Losses': max_losses,
+            'Fees Paid Total': self.total_fees,
+            'Funding Paid Total': self.total_funding
         }
