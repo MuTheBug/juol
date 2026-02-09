@@ -1,0 +1,46 @@
+import os
+from pathlib import Path
+
+# Paths
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR
+
+# Assets
+PRIMARY_ASSET = "XRPUSDT"
+SECONDARY_ASSET = "BTCUSDT"
+
+# Timeframes
+TIMEFRAME = "1h"
+
+# Feature Parameters
+EMA_PAIRS = [(8, 21), (21, 55), (55, 200)]
+LINREG_LOOKBACKS = [20, 50, 100]
+ROC_LOOKBACKS = [6, 12, 24, 48]
+ATR_PERIOD = 14
+RSI_PERIOD = 14
+MACD_PARAMS = (12, 26, 9)
+BB_PARAMS = (20, 2)
+SUPERTREND_PARAMS = [(10, 3), (20, 5)]
+ROLLING_Z_LOOKBACK = 168
+BTC_CORR_LOOKBACKS = [24, 72, 168]
+SHARPE_LOOKBACKS = [24, 72, 168]
+
+# Target Parameters (Triple Barrier Method)
+BARRIER_ATR_MULT = 1.5
+BARRIER_TIME_LIMIT = 12  # hours
+
+# Preprocessing
+CORRELATION_THRESHOLD = 0.95
+
+# Model Training (Phase 2)
+PURGE_GAP = 12
+TRAIN_WINDOW = 2000
+TEST_WINDOW = 500
+STEP_SIZE = 500
+
+# Risk Management (Phase 3)
+MAX_LEVERAGE = 10
+MAX_POSITION_SIZE = 0.30
+TAKER_FEE = 0.0004
+SLIPPAGE = 0.0001
+ROUND_TRIP_COST = (TAKER_FEE + SLIPPAGE) * 2

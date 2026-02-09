@@ -1,0 +1,12 @@
+pandas
+numpy
+pandas_ta
+scikit-learn
+matplotlib
+seaborn
+pyyaml
+optuna
+lightgbm
+xgboost
+python-binance
+ccxt
