@@ -26,6 +26,12 @@ This repository contains a production-grade autonomous trading bot for Binance U
 - **Walk-Forward Framework**: 2000-candle train, 500-candle test, and 500-candle step windows with periodic Optuna hyperparameter re-optimization.
 - **Sample Weighting**: Inverse ATR weighting to prioritize signals in cleaner, low-volatility environments.
 
+### Phase 3: Risk Management Engine
+- **Fractional Kelly**: Position sizing using Half Kelly Criterion based on trailing performance.
+- **Dynamic Leverage**: Regime-based base leverage (up to 10x) further scaled by model confidence.
+- **Circuit Breakers**: Daily/Weekly loss limits and two-tier drawdown protection.
+- **Advanced Exits**: ATR-based dynamic SL/TP, trailing stops, and time-based exits.
+
 ## Modular Components
 
 ### 1. `config.py`
@@ -78,8 +84,7 @@ The orchestration script that runs the full pipeline, prints feature/sample coun
 
 ## Roadmap
 
-- **Phase 3: Risk Management Engine** (Current): Kelly-based sizing, dynamic leverage, trailing stops, and circuit breakers.
-- **Phase 4: Event-Driven Backtester**: Candle-by-candle simulation with fee and funding rate modeling.
+- **Phase 4: Event-Driven Backtester** (Current): Candle-by-candle simulation with fee and funding rate modeling, Monte Carlo, and sensitivity analysis.
 - **Phase 5: Live Trading Infrastructure**: Async execution, API integration, and Telegram notifications.
 
 ## Risk Warning

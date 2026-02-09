@@ -61,7 +61,9 @@ class RiskManager:
                                      price: float,
                                      atr: float,
                                      confidence: float,
-                                     regime: int) -> Dict[str, Any]:
+                                     regime: int,
+                                     sl_mult: float = 1.5,
+                                     tp_mult: float = 2.5) -> Dict[str, Any]:
         """
         Calculates leverage, position size, SL, and TP.
         """
@@ -85,15 +87,15 @@ class RiskManager:
             logger.warning(f"Circuit Breaker Level 1: Drawdown {drawdown:.2%}. Reducing size by 50%.")
 
         # Notional size
-        notional_size = self.equity * kelly_size * leverage
+        notional_size = max(0.0, self.equity) * kelly_size * leverage
 
         # 4. SL / TP
-        # SL = 1.5 * ATR, TP = 2.5 * ATR
-        sl_dist = 1.5 * atr
-        tp_dist = 2.5 * atr
+        # SL = sl_mult * ATR, TP = tp_mult * ATR
+        sl_dist = sl_mult * atr
+        tp_dist = tp_mult * atr
 
         # 5. Trailing and Time-based exit parameters
-        tsl_activation = 1.5 * atr
+        tsl_activation = sl_mult * atr
         tsl_distance = 1.0 * atr
         time_exit_hours = 24
         time_exit_profit_threshold = 0.5 * atr
